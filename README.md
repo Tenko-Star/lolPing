@@ -25,6 +25,8 @@
 
 Pings and emotes show up in whole-screen capture, so friends watching your Discord or OBS stream see them too. lolPing is a desktop toy: it doesn't read, change or hook into League itself.
 
+Just want to spam "?" at everyone on your LAN? [lolPing Lite](lite/README.md) is a tiny Windows tray app that does only that: Alt + ? and a "?" lands on every screen.
+
 ## Install
 
 ### Windows

@@ -1,0 +1,37 @@
+name: lolPing Lite
+
+on:
+  push:
+    paths: ['lite/**', 'assets/textures/enemy_missing.png', 'assets/sounds/MIA.wav', 'build/icon.ico', '.github/workflows/lite.yml']
+  pull_request:
+    paths: ['lite/**', 'assets/textures/enemy_missing.png', 'assets/sounds/MIA.wav', 'build/icon.ico', '.github/workflows/lite.yml']
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: lite
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      # The release exe starts without a console; the debug one keeps it, for the log.
+      - run: cargo build --release
+      - run: cargo build
+      - run: |
+          mkdir out
+          copy target\release\lolping-lite.exe out\lolping-lite.exe
+          copy target\debug\lolping-lite.exe out\lolping-lite-debug.exe
+        shell: cmd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lolping-lite
+          path: lite/out/*.exe
+          retention-days: 30
