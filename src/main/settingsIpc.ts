@@ -6,7 +6,7 @@ import { hotkeyLabel, hotkeyToAccelerator, type Hotkey } from '../shared/keys';
 import { pingById, type PingId } from '../shared/pings';
 import type { Platform } from '../shared/platform';
 import type { JoinResult, RoomState } from '../shared/room';
-import { patchClashes, rendererPatch } from '../shared/settings';
+import { patchClashes, rendererPatch, sameHotkey } from '../shared/settings';
 import type { UpdateState } from '../shared/update';
 import { emoteFileFrom, type EmoteLibrary } from './emoteLibrary';
 import type { SettingsStore } from './settingsStore';
@@ -82,9 +82,21 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
     if (patchClashes(d.store.get(), patch, d.platform)) {
       return { ok: false, error: d.text().emoteKeyClash, settings: d.store.get() };
     }
+    const current = d.store.get();
+    if (patch.toggleHotkey || patch.quickPingHotkey) {
+      const toggle = patch.toggleHotkey ?? current.toggleHotkey;
+      const quick = patch.quickPingHotkey ?? current.quickPingHotkey;
+      if (sameHotkey(toggle, quick)) return { ok: false, error: d.text().quickPingClash, settings: current };
+    }
     if (patch.toggleHotkey) {
-      const error = hotkeyConflict(patch.toggleHotkey, d.store.get().toggleHotkey, d.text(), d.platform);
-      if (error) return { ok: false, error, settings: d.store.get() };
+      const error = hotkeyConflict(patch.toggleHotkey, current.toggleHotkey, d.text(), d.platform);
+      if (error) return { ok: false, error, settings: current };
+    }
+    if (patch.quickPingHotkey) {
+      // The quick ping is an Electron global shortcut, so its key needs an accelerator name.
+      if (!hotkeyToAccelerator(patch.quickPingHotkey)) return { ok: false, error: d.text().quickPingNoKey, settings: current };
+      const error = hotkeyConflict(patch.quickPingHotkey, current.quickPingHotkey, d.text(), d.platform);
+      if (error) return { ok: false, error, settings: current };
     }
     return { ok: true, settings: d.store.update(patch) };
   });

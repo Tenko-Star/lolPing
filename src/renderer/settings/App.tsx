@@ -2,7 +2,7 @@ import { Dropdown, FluentProvider, Option, webDarkTheme, webLightTheme } from '@
 import {
   ArrowMove24Regular, ArrowSync24Regular, CursorClick24Regular, DataPie24Regular, Info24Regular, Keyboard24Regular, MusicNote224Regular,
   Power24Regular, ResizeLarge24Regular, Rocket24Regular, Settings24Regular, Speaker224Regular, SpeakerMute24Regular,
-  Timer24Regular, Cursor24Regular, Emoji24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
+  Timer24Regular, Cursor24Regular, QuestionCircle24Regular, Emoji24Regular, LocalLanguage24Regular, PeopleCommunity24Regular,
 } from '@fluentui/react-icons';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { LANGUAGE_NAMES, LANGUAGE_PREFS, resolveLang, strings, type LanguagePref, type Strings } from '../../shared/i18n';
@@ -93,6 +93,7 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
   const off = !status.enabled || status.helper === 'failed';
   const trigger = triggerLabel(s.trigger, t.lang, PLATFORM);
   const [hotkeyError, setHotkeyError] = useState<string | null>(null);
+  const [quickError, setQuickError] = useState<string | null>(null);
   const mouseTrigger = s.trigger === 'mouse4' || s.trigger === 'mouse5';
   const customTrigger = typeof s.trigger === 'object';
   const pingPool: PoolItem<PingId>[] = ALL_PINGS.map((p) => ({
@@ -174,6 +175,19 @@ function SettingsPage({ settings: s, status, update }: { settings: Settings; sta
         </SettingRow>
         <SwitchRow icon={<Power24Regular />} title={t.startEnabled} description={t.startEnabledDesc}
           checked={s.enabledOnStart} onChange={(v) => void update({ enabledOnStart: v })} />
+        <SwitchRow icon={<QuestionCircle24Regular />} title={t.quickPing} description={t.quickPingDesc}
+          checked={s.quickPing} onChange={(v) => void update({ quickPing: v })} />
+        <SettingRow icon={<Keyboard24Regular />} title={t.quickPingShortcut} description={t.quickPingShortcutDesc} dim={!s.quickPing}>
+          <KeyCapture
+            parts={hotkeyParts(s.quickPingHotkey, PLATFORM)}
+            requireModifier
+            error={quickError}
+            onCapture={async (c) => {
+              const result = await update({ quickPingHotkey: c });
+              setQuickError(result.ok ? null : result.error);
+            }}
+          />
+        </SettingRow>
 
         <div className="section" id="pings">{t.navPings}</div>
         <SliderRow limit="pingSizePx" icon={<ResizeLarge24Regular />} title={t.pingSize} value={s.pingSizePx}

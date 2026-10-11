@@ -1,14 +1,15 @@
-import { app, clipboard, dialog, Menu, powerMonitor, screen, shell, systemPreferences } from 'electron';
+import { app, clipboard, dialog, globalShortcut, Menu, powerMonitor, screen, shell, systemPreferences } from 'electron';
 import { randomBytes, randomInt } from 'node:crypto';
 import { userInfo } from 'node:os';
 import { join } from 'node:path';
 import { resolveLang, strings, type Strings } from '../shared/i18n';
 import { SETTINGS_CH, type About, type AppStatus } from '../shared/ipc';
-import { hotkeyLabel } from '../shared/keys';
+import { hotkeyLabel, hotkeyToAccelerator } from '../shared/keys';
 import { configCommand, type HelperStatus } from '../shared/protocol';
 import type { RoomState } from '../shared/room';
 import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
 import { catalogEmote } from '../shared/emotes';
+import { donutPoint, QUICK_PING } from '../shared/quickPing';
 import { overlaySettings, type Settings } from '../shared/settings';
 import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
@@ -31,6 +32,8 @@ import { MacBackend, RELEASES_API } from './updateMac';
 import { WinBackend } from './updateWin';
 import { Updater } from './updater';
 
+/** The quick "?" fires at most this often: holding its shortcut repeats it. */
+const QUICK_PING_COOLDOWN_MS = 300;
 const ACCESSIBILITY_PANE = 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility';
 
 registerAppScheme();
@@ -297,6 +300,37 @@ function start(): void {
     relay.wake();
   });
 
+  // The quick "?": a global shortcut that pings a random spot (a ring around the middle) on the display under the mouse.
+  let quickAccelerator: string | null = null;
+  let lastQuick = 0;
+  const quickPing = (): void => {
+    const now = Date.now();
+    if (!enabled || quitting || now - lastQuick < QUICK_PING_COOLDOWN_MS) return; // a held key repeats
+    lastQuick = now;
+    const displayId = overlays.cursorDisplay();
+    const d = overlays.numbered().find((n) => n.id === displayId);
+    if (!d) return;
+    const p = donutPoint(Math.random);
+    overlays.spawnLocal(displayId, QUICK_PING, p.x * d.bounds.width, p.y * d.bounds.height);
+    room.sendPing(QUICK_PING, { d: d.number, x: p.x, y: p.y });
+  };
+  /** Registers the shortcut the settings ask for; none while the settings page is capturing a key, so it can be typed. */
+  const syncQuickShortcut = (): void => {
+    const want = settings.quickPing && !capturing && !quitting ? hotkeyToAccelerator(settings.quickPingHotkey) : null;
+    if (want === quickAccelerator) return;
+    if (quickAccelerator) globalShortcut.unregister(quickAccelerator);
+    quickAccelerator = null;
+    if (!want) return;
+    let ok = false;
+    try {
+      ok = globalShortcut.register(want, quickPing);
+    } catch {
+      // An accelerator Electron doesn't accept: reported like a taken one.
+    }
+    if (ok) quickAccelerator = want;
+    else if (!capturing) overlays.toast(text().toastQuickPingTaken(hotkeyLabel(settings.quickPingHotkey, PLATFORM)), text().toastQuickPingTakenBody);
+  };
+
   function pushStatus(): void {
     if (quitting) return;
     tray.set(trayMode(), enabled);
@@ -361,6 +395,8 @@ function start(): void {
       room.setInternetAllowed(s.allowInternet);
       pushRoom();
     }
+    if (s.quickPing !== previous.quickPing || s.quickPingHotkey.mods !== previous.quickPingHotkey.mods
+      || s.quickPingHotkey.vk !== previous.quickPingHotkey.vk) syncQuickShortcut();
     if (s.lanGroup !== previous.lanGroup) {
       if (!s.lanGroup) room.leaveGroup();
       else if (room.state().phase === 'idle') void room.joinGroup();
@@ -382,6 +418,7 @@ function start(): void {
     retryHelper: startHelper,
     setCapturing: (on) => {
       capturing = on;
+      syncQuickShortcut();
       bridge.send({ type: 'suspend', on });
     },
     openAccessibility: () => {
@@ -410,6 +447,7 @@ function start(): void {
   onSettingsWindowGone(() => {
     if (!capturing) return;
     capturing = false;
+    syncQuickShortcut();
     bridge.send({ type: 'suspend', on: false });
   });
 
@@ -420,6 +458,7 @@ function start(): void {
   syncRoomFlags();
   room.setInternetAllowed(settings.allowInternet);
   pushRoom();
+  syncQuickShortcut();
   if (settings.rejoinRoom && settings.lastRoomCode) void room.join(settings.lastRoomCode);
   else if (settings.lanGroup) void room.joinGroup();
   if (IS_MAC) {
@@ -441,6 +480,7 @@ function start(): void {
     event.preventDefault();
     updater?.stop(); // aborts a download and drops a check in flight; an install that is quitting the app is left alone
     room.quit(); // says bye, so the others see "left" instead of waiting for a timeout
+    globalShortcut.unregisterAll();
     stopWaitingForAccess();
     tray.destroy();
     overlays.destroy();

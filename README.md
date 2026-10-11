@@ -98,6 +98,7 @@ Out of the box, lolPing joins the **LAN channel**: every lolPing on the same loc
 - It runs over UDP multicast: group `239.255.74.74`, port `47474`, one hop (it never leaves your network, and never goes through internet relays). It is sent out of every network adapter, so VPN or virtual adapters don't swallow it.
 - **Alert on incoming pings** (on by default) shows the alert on the display your mouse is on. If the sender's display number doesn't exist on your machine (say they ping on their display 2 and you have one screen), the ping lands on your display 1 at the same relative spot, and the alert says it moved.
 - Joining or creating a room leaves the LAN channel; leaving the room brings you back. Turn off **Join the LAN channel automatically** in Settings → Room to stay out of it, or leave it from the tray menu.
+- **Quick “?” ping:** press **Ctrl + Alt + Q** (change it in Settings → Toggle) and a “?” lands at a random spot on the display under your mouse, for you and everyone in your room or LAN channel. Spots favour an elliptical ring around the middle of the screen: rarely the centre, rarely the edges.
 - The LAN channel has no member limit and is open to anyone on your network: anyone there can see your pings and your name. Use a room to ping only your friends.
 
 ## Ping with friends (rooms)

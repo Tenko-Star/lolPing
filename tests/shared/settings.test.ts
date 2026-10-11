@@ -95,6 +95,13 @@ describe('room settings', () => {
     });
   });
 
+  it('has the quick "?" on Ctrl + Alt + Q, and turns it off when it collides with the toggle shortcut', () => {
+    expect(normalizeSettings({})).toMatchObject({ quickPing: true, quickPingHotkey: { mods: 3, vk: 0x51 } });
+    const clash = normalizeSettings({ toggleHotkey: { mods: 3, vk: 0x51 } });
+    expect(clash).toMatchObject({ quickPing: false, quickPingHotkey: { mods: 3, vk: 0x51 } });
+    expect(normalizeSettings({ quickPingHotkey: { mods: 4, vk: 0x51 } }).quickPingHotkey).toEqual({ mods: 3, vk: 0x51 }); // Shift alone
+  });
+
   it('keeps the LAN channel and ping alerts turned off, and ignores anything that is not a boolean', () => {
     expect(normalizeSettings({ lanGroup: false, pingAlert: false })).toMatchObject({ lanGroup: false, pingAlert: false });
     expect(normalizeSettings({ lanGroup: 'no', pingAlert: 0 })).toMatchObject({ lanGroup: true, pingAlert: true });

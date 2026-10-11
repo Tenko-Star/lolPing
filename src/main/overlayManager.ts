@@ -124,6 +124,11 @@ export class OverlayManager extends EventEmitter {
     this.send(d.id, 'ping:spawn', { id, x: d.bounds.width / 2, y: d.bounds.height / 2 });
   }
 
+  /** One of our own pings placed without the wheel (the quick "?"): shown here only, the caller shares it. */
+  spawnLocal(displayId: number, id: PingId, x: number, y: number): void {
+    this.send(displayId, 'ping:spawn', { id, x, y });
+  }
+
   /** A room member's ping, already mapped onto one of our displays. */
   spawnRemote(p: { displayId: number; x: number; y: number; id: PingId; tag: PingTag }): void {
     this.send(p.displayId, 'ping:spawn', { id: p.id, x: p.x, y: p.y, tag: p.tag });

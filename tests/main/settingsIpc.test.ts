@@ -62,6 +62,21 @@ describe('settings IPC', () => {
     expect(store.get().customEmotes).toEqual([]);
   });
 
+  it('refuses a quick "?" shortcut that is the toggle shortcut, either way round', async () => {
+    const toggle = store.get().toggleHotkey;
+    expect(await call(SETTINGS_CH.set, { quickPingHotkey: toggle })).toMatchObject({ ok: false, error: strings('en').quickPingClash });
+    expect(await call(SETTINGS_CH.set, { toggleHotkey: store.get().quickPingHotkey }))
+      .toMatchObject({ ok: false, error: strings('en').quickPingClash });
+    expect(store.get().toggleHotkey).toEqual(toggle);
+  });
+
+  it('refuses a quick "?" key that a global shortcut cannot use, and takes one that it can', async () => {
+    expect(await call(SETTINGS_CH.set, { quickPingHotkey: { mods: 3, vk: 0x6b } })) // Num +
+      .toMatchObject({ ok: false, error: strings('en').quickPingNoKey });
+    expect(await call(SETTINGS_CH.set, { quickPingHotkey: { mods: 3, vk: 0x77 } })) // F8
+      .toMatchObject({ ok: true, settings: { quickPingHotkey: { mods: 3, vk: 0x77 } } });
+  });
+
   it('setSettings treats a patch that is not an object as no change', async () => {
     expect(await call(SETTINGS_CH.set, null)).toMatchObject({ ok: true, settings: { volume: store.get().volume } });
   });

@@ -50,6 +50,10 @@ export interface Settings {
   allowInternet: boolean;
   /** Be in the LAN group (multicast, no code) whenever not in a code room. */
   lanGroup: boolean;
+  /** A global shortcut that sends a "?" ping to a random spot (see quickPing.ts) on the display under the mouse. */
+  quickPing: boolean;
+  /** Never the same as `toggleHotkey`: such a pair turns the quick ping off. */
+  quickPingHotkey: Hotkey;
   /** A toast on the display under the mouse for every ping and emote someone else sends. */
   pingAlert: boolean;
   rejoinRoom: boolean;
@@ -100,6 +104,8 @@ export const DEFAULT_SETTINGS: Settings = {
   incomingPingLimit: 5,
   allowInternet: true,
   lanGroup: true,
+  quickPing: true,
+  quickPingHotkey: { mods: MOD.ctrl | MOD.alt, vk: 0x51 }, // Ctrl + Alt + Q
   pingAlert: true,
   rejoinRoom: true,
   lastRoomCode: null,
@@ -125,7 +131,7 @@ export const LIMITS = {
 } as const;
 
 type NumKey = keyof typeof LIMITS;
-type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'lanGroup' | 'pingAlert' | 'rejoinRoom' | 'roomMuted'
+type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'lanGroup' | 'quickPing' | 'pingAlert' | 'rejoinRoom' | 'roomMuted'
   | 'emoteClick' | 'emoteSound' | 'autoUpdateCheck';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -176,7 +182,7 @@ export function patchClashes(current: Settings, patch: Partial<Settings>, platfo
   return triggersClash(trigger(pick('trigger'), platform), emoteKey(pick('emoteTrigger'), platform), hotkey(pick('toggleHotkey')));
 }
 
-function hotkey(raw: unknown): Hotkey {
+function hotkey(raw: unknown, fallback: Hotkey = DEFAULT_SETTINGS.toggleHotkey): Hotkey {
   // Needs Ctrl, Alt or Win: a Shift-only hotkey would swallow ordinary capital letters system-wide.
   if (
     isObj(raw) && Number.isInteger(raw.mods) && (raw.mods as number) >= 1 && (raw.mods as number) <= 15
@@ -184,8 +190,10 @@ function hotkey(raw: unknown): Hotkey {
   ) {
     return { mods: raw.mods as number, vk: raw.vk };
   }
-  return { ...DEFAULT_SETTINGS.toggleHotkey };
+  return { ...fallback };
 }
+
+export const sameHotkey = (a: Hotkey, b: Hotkey): boolean => a.mods === b.mods && a.vk === b.vk;
 
 function roomCode(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
@@ -218,6 +226,7 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
   const toggleHotkey = hotkey(r.toggleHotkey);
   const emote = emoteKey(r.emoteTrigger, platform);
   const custom = customEmotes(r.customEmotes);
+  const quickHotkey = hotkey(r.quickPingHotkey, DEFAULT_SETTINGS.quickPingHotkey);
   return {
     version: 1,
     enabledOnStart: bool(r.enabledOnStart, 'enabledOnStart'),
@@ -239,6 +248,8 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     incomingPingLimit: num(r.incomingPingLimit, 'incomingPingLimit'),
     allowInternet: bool(r.allowInternet, 'allowInternet'),
     lanGroup: bool(r.lanGroup, 'lanGroup'),
+    quickPing: sameHotkey(quickHotkey, toggleHotkey) ? false : bool(r.quickPing, 'quickPing'),
+    quickPingHotkey: quickHotkey,
     pingAlert: bool(r.pingAlert, 'pingAlert'),
     rejoinRoom: bool(r.rejoinRoom, 'rejoinRoom'),
     lastRoomCode: roomCode(r.lastRoomCode),
