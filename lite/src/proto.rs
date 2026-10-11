@@ -142,7 +142,9 @@ pub fn decode(buf: &[u8]) -> Option<Packet> {
                 return None;
             }
             let members = rest[1..]
-                .chunks_exact(LISTED_LEN)
+                .as_chunks::<LISTED_LEN>()
+                .0
+                .iter()
                 .map(|e| Listed {
                     id: u64::from_le_bytes(e[..8].try_into().unwrap()),
                     addr: SocketAddrV4::new(

@@ -46,7 +46,7 @@ pub fn parse(bytes: &[u8]) -> Option<Pcm> {
 
 /// Scales every 16-bit sample.
 pub fn scale(pcm: &mut Pcm, volume: f32) {
-    for s in pcm.data.chunks_exact_mut(2) {
+    for s in pcm.data.as_chunks_mut::<2>().0 {
         let v = i16::from_le_bytes([s[0], s[1]]) as f32 * volume;
         s.copy_from_slice(&(v.round().clamp(i16::MIN as f32, i16::MAX as f32) as i16).to_le_bytes());
     }
