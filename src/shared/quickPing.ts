@@ -6,11 +6,15 @@ export const QUICK_PING: PingId = 'missing';
 /**
  * Where quick pings land, in "elliptical radius": 0 is the middle of the display, 1 the middle of an edge. The display's
  * own aspect ratio stretches the circle into an ellipse, so the ring hugs the screen's shape.
- * Density is a Gaussian ring: ~0 in the middle, highest at `ring`, ~1 % of that at the edges, less in the corners.
+ * Density is a Gaussian ring, steeper outside than in: highest at `ring`, ~1 % of that at the edges and less in the
+ * corners, and inside it falls off slowly, so only a small hole (about 5 % of the display around its middle) stays quiet.
  */
 export const DONUT = {
   ring: 0.55,
-  width: 0.15,
+  /** How fast the density falls off towards the middle. */
+  inner: 0.2,
+  /** How fast it falls off towards the edges. */
+  outer: 0.15,
   /** Kept clear at each edge (fraction of the display), so a ping is never cut in half. */
   margin: 0.05,
 } as const;
@@ -18,7 +22,7 @@ export const DONUT = {
 /** Relative density at (u, v), both -1…1 from the middle: 1 on the ring. */
 export function donutDensity(u: number, v: number): number {
   const r = Math.hypot(u, v);
-  const z = (r - DONUT.ring) / DONUT.width;
+  const z = (r - DONUT.ring) / (r < DONUT.ring ? DONUT.inner : DONUT.outer);
   return Math.exp(-0.5 * z * z);
 }
 

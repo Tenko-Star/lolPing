@@ -22,7 +22,10 @@ describe('quick "?" ping', () => {
   });
 
   it('is a donut: low in the middle, highest on the ring, low at the edges and lower still in the corners', () => {
-    expect(donutDensity(0, 0)).toBeLessThan(0.01);
+    expect(donutDensity(0, 0)).toBeLessThan(0.05);
+    // The quiet hole is small: by a ninth of the way out (5 % of the display) the density is back to a tenth of the peak.
+    expect(donutDensity(0.11, 0)).toBeLessThan(0.1);
+    expect(donutDensity(0.13, 0)).toBeGreaterThan(0.1);
     expect(donutDensity(DONUT.ring, 0)).toBe(1);
     expect(donutDensity(0, -DONUT.ring)).toBe(1);
     expect(donutDensity(1, 0)).toBeLessThan(0.05);
@@ -40,12 +43,12 @@ describe('quick "?" ping', () => {
       expect(p.y).toBeLessThanOrEqual(1 - DONUT.margin);
     }
     const share = (lo: number, hi: number): number => points.filter((p) => radius(p) >= lo && radius(p) < hi).length / n;
-    expect(share(0, 0.2)).toBeLessThan(0.02);
-    expect(share(0.35, 0.75)).toBeGreaterThan(0.75);
+    expect(share(0, 0.1)).toBeLessThan(0.005);
+    expect(share(0.3, 0.75)).toBeGreaterThan(0.75);
     expect(share(0.9, 2)).toBeLessThan(0.05);
     // Per unit of area, the ring is far denser than the middle or the edges.
     const density = (lo: number, hi: number): number => share(lo, hi) / (Math.PI * (hi * hi - lo * lo));
-    expect(density(0.5, 0.6)).toBeGreaterThan(20 * density(0, 0.2));
+    expect(density(0.5, 0.6)).toBeGreaterThan(10 * density(0, 0.1));
     expect(density(0.5, 0.6)).toBeGreaterThan(10 * density(0.9, 1));
     // Every direction gets its share: left, right, top and bottom of the ring.
     const sides = [points.filter((p) => p.x < 0.5).length, points.filter((p) => p.y < 0.5).length].map((c) => c / n);
