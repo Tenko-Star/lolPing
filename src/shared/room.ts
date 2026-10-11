@@ -20,8 +20,10 @@ export interface RoomMember {
 
 export interface RoomStateCore {
   phase: 'idle' | 'joining' | 'active';
-  /** Display form, PING-XXXXX-XXXXX. */
+  /** Display form, PING-XXXXX-XXXXX. Null when idle and in the LAN group. */
   code: string | null;
+  /** In the LAN group: everyone on the network, joined without a code. */
+  group: boolean;
   /** Us first, then everyone else in the order they appeared. */
   members: RoomMember[];
   lan: TransportStatus;

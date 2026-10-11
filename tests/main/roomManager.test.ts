@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { open, seal, type RoomKeys } from '../../src/main/roomCrypto';
-import { RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from '../../src/main/roomManager';
+import { LAN_GROUP_SECRET, RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from '../../src/main/roomManager';
 import { formatRoomCode, makeRoomCode } from '../../src/shared/roomCode';
 import { decodeMessage, encodeMessage, type RoomMessage } from '../../src/shared/roomProtocol';
 import { FakeTransport } from './fixtures/fakeTransport';
@@ -250,7 +250,7 @@ describe('incoming pings', () => {
 
   it('maps a ping onto the target display with the sender’s tag', () => {
     alex.ping({ ping: 'push', x: 0.5, y: 0.25 });
-    expect(pings).toEqual([{ displayId: 100, x: 960, y: 270, id: 'push', tag: { name: 'Alex', color: 4 } }]);
+    expect(pings).toEqual([{ displayId: 100, from: 1, x: 960, y: 270, id: 'push', tag: { name: 'Alex', color: 4 } }]);
   });
 
   it('shows a packet that arrives twice only once', () => {
@@ -306,7 +306,7 @@ describe('incoming emotes', () => {
 
   it('emits remote emotes with the sender’s tag, mapped onto the target display', () => {
     alex.emote({ e: 'gg', d: 1, x: 0.5, y: 0.25 });
-    expect(emotes).toEqual([{ displayId: 100, x: 960, y: 270, ref: 'gg', peer: alex.peer, tag: { name: 'Pa', color: 2 } }]);
+    expect(emotes).toEqual([{ displayId: 100, from: 1, x: 960, y: 270, ref: 'gg', peer: alex.peer, tag: { name: 'Pa', color: 2 } }]);
     expect(pings).toHaveLength(0);
   });
 
@@ -498,6 +498,114 @@ describe('outgoing', () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect(room.state().phase).toBe('idle');
     expect(lan.started).toBeNull();
+  });
+});
+
+describe('LAN group', () => {
+  let net: FakeTransport;
+  let g: RoomManager;
+  let groupOn: boolean;
+  let derived: string[];
+  let gToasts: RoomToast[];
+  let gSaved: (string | null)[];
+  beforeEach(() => {
+    net = new FakeTransport('internet');
+    groupOn = true;
+    derived = [];
+    gToasts = [];
+    gSaved = [];
+    g = new RoomManager({
+      transports: [lan, net], now: () => Date.now(), randomBytes: (n) => new Uint8Array(n).fill(0xcd),
+      deriveKeys: async (c) => {
+        derived.push(c);
+        return KEYS;
+      },
+      appVersion: '0.6.0', profile: () => profile,
+      resolveTarget: () => ({ displayId: 1, width: 100, height: 100 }),
+      lanGroup: () => groupOn,
+    });
+    g.on('toast', (t: RoomToast) => gToasts.push(t));
+    g.on('saveCode', (c: string | null) => gSaved.push(c));
+  });
+  afterEach(() => g.quit());
+
+  it('joins without a code, on LAN only, with keys everyone knows, and is never saved as the last room', async () => {
+    await g.joinGroup();
+    expect(derived).toEqual([LAN_GROUP_SECRET]);
+    expect(lan.started).toBe(KEYS);
+    expect(net.started).toBeNull();
+    expect(g.state()).toMatchObject({ phase: 'joining', group: true, code: null, internet: 'off' });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(g.state()).toMatchObject({ phase: 'active', group: true });
+    expect(gToasts).toEqual([{ kind: 'joinedGroup' }]);
+    expect(gSaved).toEqual([]);
+    await g.joinGroup(); // already in it: nothing happens
+    expect(derived).toHaveLength(1);
+  });
+
+  it('has no member cap', async () => {
+    await g.joinGroup();
+    for (let i = 0; i < 12; i++) new Remote(i.toString(16).padStart(16, '0'), `lan:10.0.0.${i}:47474`, lan).presence();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(g.state().phase).toBe('active');
+    expect(g.state().members).toHaveLength(13);
+  });
+
+  it('never starts the relays, even when internet connections are turned on in it', async () => {
+    await g.joinGroup();
+    g.setInternetAllowed(false);
+    g.setInternetAllowed(true);
+    expect(net.starts).toBe(0);
+  });
+
+  it('a code room left goes back to the group; leaving the group goes idle', async () => {
+    await g.joinGroup();
+    await g.join(CODE);
+    expect(g.state()).toMatchObject({ group: false, code: formatRoomCode(CODE) });
+    expect(net.started).toBe(KEYS);
+    g.leave();
+    expect(gSaved).toEqual([null]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(g.state()).toMatchObject({ group: true, phase: 'joining' });
+    expect(net.started).toBeNull();
+    g.leave();
+    expect(g.state().phase).toBe('idle');
+    expect(gSaved).toEqual([null]);
+  });
+
+  it('stays idle after leaving a code room while the group is off', async () => {
+    groupOn = false;
+    await g.join(CODE);
+    g.leave();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(g.state().phase).toBe('idle');
+  });
+
+  it('falls back to the group when the code room is full', async () => {
+    await g.join(CODE);
+    for (let i = 0; i < 8; i++) new Remote(`${i}`.repeat(16), `lan:10.0.0.${i}:47474`, lan).presence();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(gToasts[0]).toEqual({ kind: 'full' });
+    expect(g.state()).toMatchObject({ group: true });
+  });
+
+  it('leaveGroup() leaves the group but not a code room', async () => {
+    await g.join(CODE);
+    g.leaveGroup();
+    expect(g.state().code).toBe(formatRoomCode(CODE));
+    await g.joinGroup();
+    g.leaveGroup();
+    expect(g.state().phase).toBe('idle');
+  });
+
+  it('tells which of the sender’s displays a ping came from', async () => {
+    const got: RemotePing[] = [];
+    g.on('remotePing', (p: RemotePing) => got.push(p));
+    await g.joinGroup();
+    const bob = new Remote('b'.repeat(16), 'lan:10.0.0.9:47474', lan);
+    bob.presence();
+    bob.ping({ d: 3, x: 0.5, y: 0.5 });
+    expect(got).toEqual([{ displayId: 1, from: 3, x: 50, y: 50, id: 'danger', tag: { name: 'Pb', color: 2 } }]);
   });
 });
 

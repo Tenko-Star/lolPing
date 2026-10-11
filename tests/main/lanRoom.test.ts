@@ -20,7 +20,7 @@ async function until(cond: () => boolean, ms = 4000): Promise<void> {
 }
 
 function peer(port: number, other: number, name: string) {
-  const lan = new LanTransport({ port, bindAddress: '127.0.0.1', broadcast: false, seeds: [{ host: '127.0.0.1', port: other }] });
+  const lan = new LanTransport({ port, bindAddress: '127.0.0.1', multicast: false, seeds: [{ host: '127.0.0.1', port: other }] });
   const room = new RoomManager({
     transports: [lan],
     now: Date.now,
@@ -57,7 +57,7 @@ describe('two rooms over loopback UDP', () => {
 
     a.room.sendPing('push', { d: 1, x: 0.5, y: 0.5 });
     await until(() => b.pings.length === 1);
-    expect(b.pings[0]).toEqual({ displayId: 1, x: 500, y: 250, id: 'push', tag: { name: 'Alice', color: 1 } });
+    expect(b.pings[0]).toEqual({ displayId: 1, from: 1, x: 500, y: 250, id: 'push', tag: { name: 'Alice', color: 1 } });
 
     b.lan.rebind();
     await until(() => b.lan.status === 'ok');

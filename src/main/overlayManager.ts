@@ -146,8 +146,18 @@ export class OverlayManager extends EventEmitter {
     return this.numberedList;
   }
 
+  /** On the display under the mouse, where the user is looking, rather than always on the primary one. */
   toast(title: string, body: string): void {
-    this.send(screen.getPrimaryDisplay().id, 'toast:show', { title, body });
+    this.send(this.cursorDisplay(), 'toast:show', { title, body });
+  }
+
+  /** The display under the mouse, or the primary one when that can't be told. */
+  cursorDisplay(): number {
+    try {
+      return screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id;
+    } catch {
+      return screen.getPrimaryDisplay().id;
+    }
   }
 
   destroy(): void {

@@ -43,6 +43,7 @@ export interface SettingsIpcDeps {
   room: {
     state(): RoomState;
     create(): Promise<void>;
+    joinGroup(): Promise<void>;
     join(text: string): Promise<JoinResult>;
     leave(): void;
     mute(peer: string, on: boolean): void;
@@ -122,6 +123,7 @@ export function registerSettingsIpc(d: SettingsIpcDeps): void {
   ipcMain.handle(SETTINGS_CH.openAccessibility, () => d.openAccessibility());
   ipcMain.handle(SETTINGS_CH.roomGet, () => d.room.state());
   ipcMain.handle(SETTINGS_CH.roomCreate, () => d.room.create());
+  ipcMain.handle(SETTINGS_CH.roomJoinGroup, () => d.room.joinGroup());
   ipcMain.handle(SETTINGS_CH.roomJoin, (_e, text: unknown): Promise<JoinResult> | JoinResult =>
     typeof text === 'string' ? d.room.join(text) : { ok: false, error: 'invalid' });
   ipcMain.handle(SETTINGS_CH.roomLeave, () => d.room.leave());

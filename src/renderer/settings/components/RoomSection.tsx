@@ -1,7 +1,7 @@
 import { Button, Input, Slider, Spinner } from '@fluentui/react-components';
 import {
-  ArrowSync24Regular, Color24Regular, Desktop24Regular, Globe24Regular, Person24Regular, PeopleCommunity24Regular,
-  SpeakerMute24Regular, TopSpeed24Regular, Warning24Regular,
+  Alert24Regular, ArrowSync24Regular, Color24Regular, Desktop24Regular, Globe24Regular, Person24Regular, PeopleCommunity24Regular,
+  Router24Regular, SpeakerMute24Regular, TopSpeed24Regular, Warning24Regular,
 } from '@fluentui/react-icons';
 import { useEffect, useRef, useState } from 'react';
 import type { RoomMember, RoomState } from '../../../shared/room';
@@ -34,7 +34,32 @@ function NameRow({ value, onSave }: { value: string; onSave(name: string): void 
   );
 }
 
-function JoinCard() {
+/** The LAN group: everyone on the network, no code. Shown while in it, or as a way back in after leaving it. */
+function GroupCard({ room }: { room: RoomState }) {
+  const t = useText();
+  const [busy, setBusy] = useState(false);
+  const inGroup = room.group;
+  return (
+    <div className="card">
+      <span className="icon"><Router24Regular /></span>
+      <div className="lbl">
+        {t.groupTitle}
+        <span className="desc">{inGroup && room.phase === 'joining' ? t.groupJoining : t.groupDesc}</span>
+      </div>
+      <div className="ctl">
+        {inGroup && room.phase === 'joining' ? <Spinner size="tiny" /> : null}
+        {inGroup
+          ? <Button onClick={() => void api.leaveRoom()}>{t.groupLeave}</Button>
+          : <Button appearance="primary" disabled={busy} onClick={() => {
+            setBusy(true);
+            void api.joinGroup().finally(() => setBusy(false));
+          }}>{t.groupJoin}</Button>}
+      </div>
+    </div>
+  );
+}
+
+function JoinCard({ hint }: { hint?: string }) {
   const t = useText();
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +81,7 @@ function JoinCard() {
       <span className="icon"><PeopleCommunity24Regular /></span>
       <div className="lbl">
         {t.roomJoinTitle}
-        <span className="desc">{t.roomJoinDesc}</span>
+        <span className="desc">{hint ?? t.roomJoinDesc}</span>
         <span className="desc">{t.roomNetworkHint}</span>
       </div>
       <div className="ctl">
@@ -109,7 +134,6 @@ function InRoom({ room, allowInternet }: { room: RoomState; allowInternet: boole
     const timer = setTimeout(() => setCopied(false), 1500);
     return () => clearTimeout(timer);
   }, [copied]);
-  const alone = room.members.length <= 1;
   return (
     <>
       <div className="card">
@@ -127,6 +151,18 @@ function InRoom({ room, allowInternet }: { room: RoomState; allowInternet: boole
           <Button onClick={() => void api.leaveRoom()}>{t.roomLeave}</Button>
         </div>
       </div>
+      <Members room={room} allowInternet={allowInternet} />
+    </>
+  );
+}
+
+/** Network warnings and who is here: the same for a code room and the LAN group. */
+function Members({ room, allowInternet }: { room: RoomState; allowInternet: boolean }) {
+  const t = useText();
+  const alone = room.members.length <= 1;
+  const lonely = room.group ? t.groupLonely : t.roomLonely;
+  return (
+    <>
       {room.lan === 'unavailable' ? (
         <div className="card permission">
           <span className="icon"><Warning24Regular /></span>
@@ -152,8 +188,8 @@ function InRoom({ room, allowInternet }: { room: RoomState; allowInternet: boole
         {room.members.map((m) => <MemberRow key={m.peer} m={m} />)}
         {alone ? (
           <div className="desc roomWaiting">
-            {room.lonely ? `${t.roomWaiting} ${t.roomLonely}` : t.roomWaiting}
-            {room.lonely && !allowInternet ? <span className="warnText"> {t.roomLonelyInternetOff}</span> : null}
+            {room.lonely ? `${t.roomWaiting} ${lonely}` : t.roomWaiting}
+            {room.lonely && !allowInternet && !room.group ? <span className="warnText"> {t.roomLonelyInternetOff}</span> : null}
           </div>
         ) : null}
         {room.clockSkew ? <div className="desc roomWaiting warnText">{t.roomClockSkew}</div> : null}
@@ -177,7 +213,17 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
           ))}
         </div>
       </SettingRow>
-      {room.phase === 'idle' ? <JoinCard /> : <InRoom room={room} allowInternet={s.allowInternet} />}
+      {room.phase !== 'idle' && !room.group ? <InRoom room={room} allowInternet={s.allowInternet} /> : (
+        <>
+          <GroupCard room={room} />
+          {room.group ? <Members room={room} allowInternet={s.allowInternet} /> : null}
+          <JoinCard hint={room.group ? t.groupOrRoom : undefined} />
+        </>
+      )}
+      <SwitchRow icon={<Router24Regular />} title={t.groupSwitch} description={t.groupSwitchDesc}
+        checked={s.lanGroup} onChange={(v) => void update({ lanGroup: v })} />
+      <SwitchRow icon={<Alert24Regular />} title={t.pingAlert} description={t.pingAlertDesc}
+        checked={s.pingAlert} onChange={(v) => void update({ pingAlert: v })} />
       <SwitchRow icon={<SpeakerMute24Regular />} title={t.roomMute} description={t.roomMuteDesc}
         checked={s.roomMuted} onChange={(v) => void update({ roomMuted: v })} />
       <SettingRow icon={<TopSpeed24Regular />} title={t.roomLimit} description={t.roomLimitDesc} dim={s.roomMuted}>
@@ -195,7 +241,7 @@ export function RoomSection({ settings: s, update }: { settings: Settings; updat
           ))}
         </span>
       </SettingRow>
-      <p className="desc roomNote">{t.roomPrivacy} {t.roomHelp}</p>
+      <p className="desc roomNote">{t.roomPrivacy} {t.groupPrivacy} {t.roomHelp}</p>
     </>
   );
 }

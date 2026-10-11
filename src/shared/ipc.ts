@@ -95,6 +95,8 @@ export interface SettingsApi {
   getRoom(): Promise<RoomState>;
   onRoom(cb: (s: RoomState) => void): () => void;
   createRoom(): Promise<void>;
+  /** Joins the LAN group: everyone on the network, no code. */
+  joinGroup(): Promise<void>;
   /** Accepts a code or any text containing one. */
   joinRoom(text: string): Promise<JoinResult>;
   leaveRoom(): Promise<void>;

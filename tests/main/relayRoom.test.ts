@@ -70,8 +70,8 @@ describe('rooms over a relay', () => {
   }, 20_000);
 
   it('switches a member to the internet path when LAN stops', async () => {
-    const lanA = new LanTransport({ port: 47_511, bindAddress: '127.0.0.1', broadcast: false, seeds: [{ host: '127.0.0.1', port: 47_512 }] });
-    const lanB = new LanTransport({ port: 47_512, bindAddress: '127.0.0.1', broadcast: false, seeds: [{ host: '127.0.0.1', port: 47_511 }] });
+    const lanA = new LanTransport({ port: 47_511, bindAddress: '127.0.0.1', multicast: false, seeds: [{ host: '127.0.0.1', port: 47_512 }] });
+    const lanB = new LanTransport({ port: 47_512, bindAddress: '127.0.0.1', multicast: false, seeds: [{ host: '127.0.0.1', port: 47_511 }] });
     const a = peer('Ana', [lanA, new RelayTransport({ urls: [relay.url] })]);
     const b = peer('Ben', [lanB, new RelayTransport({ urls: [relay.url] })]);
     peers.push(a, b);

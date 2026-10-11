@@ -12,6 +12,11 @@ import { open, seal, type RoomKeys } from './roomCrypto';
 import type { PeerKey, Transport, TransportStatus } from './transport';
 
 export const MAX_MEMBERS = 8;
+/**
+ * What the LAN group's keys are derived from. Everyone knows it: the group is open to every lolPing on the network,
+ * and its packets are sealed only so stray traffic and other rooms' packets never pass for ours.
+ */
+export const LAN_GROUP_SECRET = 'lolping/lan-group/v1';
 const SETTLE_MS = 3000;
 /** Relays can take a while to answer: the "room full" check never waits longer than this after joining. */
 const SETTLE_CAP_MS = 15_000;
@@ -39,6 +44,8 @@ const SKEW_HINT_MS = 30_000;
 
 export interface RemotePing {
   displayId: number;
+  /** The sender's display number: the ping lands on our display with that number, or on our #1. */
+  from: number;
   x: number;
   y: number;
   id: PingId;
@@ -47,6 +54,8 @@ export interface RemotePing {
 
 export interface RemoteEmote {
   displayId: number;
+  /** As in RemotePing. */
+  from: number;
   x: number;
   y: number;
   ref: EmoteRef;
@@ -58,6 +67,7 @@ export interface RemoteEmote {
 export type RoomToast =
   | { kind: 'joined' | 'left' | 'disconnected'; name: string }
   | { kind: 'joinedRoom'; code: string }
+  | { kind: 'joinedGroup' }
   | { kind: 'full' };
 
 export interface RoomDeps {
@@ -70,6 +80,8 @@ export interface RoomDeps {
   profile(): { name: string; color: number; limit: number };
   /** Display number → where a ping for it lands here, or null to drop it. The hook share mode will replace. */
   resolveTarget(d: number): { displayId: number; width: number; height: number } | null;
+  /** Whether to fall back to the LAN group when a code room is left (or turns out to be full). Read on every use. */
+  lanGroup?(): boolean;
 }
 
 interface Member {
@@ -91,7 +103,8 @@ const toHex = (b: Uint8Array): string => [...b].map((v) => v.toString(16).padSta
 
 /**
  * The room: who is in it, what we send, and what we let through. Talks to the network only through transports,
- * which carry sealed packets. Events: 'state' (RoomStateCore), 'remotePing' (RemotePing), 'remoteEmote' (RemoteEmote), 'toast' (RoomToast),
+ * which carry sealed packets. It is either a code room (PING-XXXXX-XXXXX, up to 8 people, LAN and relays) or the LAN
+ * group: everyone on the network who has it on, with no code, no member cap and never over relays. Events: 'state' (RoomStateCore), 'remotePing' (RemotePing), 'remoteEmote' (RemoteEmote), 'toast' (RoomToast),
  * 'saveCode' (canonical code | null: what "rejoin last room" should remember).
  */
 export class RoomManager extends EventEmitter {
@@ -99,6 +112,8 @@ export class RoomManager extends EventEmitter {
   self: string;
   private phase: RoomStateCore['phase'] = 'idle';
   private code: string | null = null;
+  /** The LAN group rather than a code room (only meaningful while not idle). */
+  private group = false;
   private keys: RoomKeys | null = null;
   /** Bumped on every join and leave, so a join still deriving keys can tell it was cancelled. */
   private session = 0;
@@ -152,17 +167,38 @@ export class RoomManager extends EventEmitter {
     await this.start(makeRoomCode(this.deps.randomBytes(9)));
   }
 
+  /** Joins the LAN group, leaving a code room if in one. Nothing to do when already in it. */
+  async joinGroup(): Promise<void> {
+    if (this.group && this.phase !== 'idle') return;
+    await this.start(null);
+  }
+
   async join(text: string): Promise<JoinResult> {
     const parsed = parseRoomCode(text);
     if (!parsed.ok) return parsed;
     return (await this.start(parsed.code)) ? { ok: true } : { ok: false, error: 'failed' };
   }
 
-  /** Leaves the room and forgets it, so it isn't rejoined on the next launch. */
+  /**
+   * Leaves the room and forgets it, so it isn't rejoined on the next launch. Leaving a code room goes back to the LAN
+   * group when that is on; leaving the group goes idle.
+   */
   leave(): void {
     if (this.phase === 'idle') return;
+    const wasGroup = this.group;
     this.stop();
+    if (wasGroup) return;
     this.emit('saveCode', null);
+    this.fallBackToGroup();
+  }
+
+  /** The LAN group was turned off in settings: leave it if we are in it. A code room is left alone. */
+  leaveGroup(): void {
+    if (this.group && this.phase !== 'idle') this.stop();
+  }
+
+  private fallBackToGroup(): void {
+    if (this.deps.lanGroup?.()) void this.joinGroup();
   }
 
   /** Says bye on the way out, but keeps the code for "rejoin last room". */
@@ -215,7 +251,7 @@ export class RoomManager extends EventEmitter {
     if (on === this.internetAllowed) return;
     this.internetAllowed = on;
     const keys = this.keys;
-    if (!keys) return; // idle, or still deriving keys: start() reads the flag
+    if (!keys || this.group) return; // idle, still deriving keys (start() reads the flag), or the LAN group: never relays
     for (const t of this.deps.transports) {
       if (t.kind !== 'internet') continue;
       if (on) {
@@ -259,6 +295,7 @@ export class RoomManager extends EventEmitter {
     return {
       phase: this.phase,
       code: this.code ? formatRoomCode(this.code) : null,
+      group: this.phase !== 'idle' && this.group,
       members,
       lan: status('lan'),
       internet: status('internet'),
@@ -267,20 +304,25 @@ export class RoomManager extends EventEmitter {
     };
   }
 
-  /** False when the keys couldn't be derived: the room is back to idle. */
-  private async start(code: string): Promise<boolean> {
-    if (this.phase !== 'idle') this.leave();
+  /** `code` null: the LAN group. False when the keys couldn't be derived: the room is back to idle. */
+  private async start(code: string | null): Promise<boolean> {
+    if (this.phase !== 'idle') {
+      const wasGroup = this.group;
+      this.stop();
+      if (!wasGroup) this.emit('saveCode', null);
+    }
     const session = ++this.session;
     this.self = toHex(this.deps.randomBytes(8));
     this.seq = 0;
     this.phase = 'joining';
     this.code = code;
+    this.group = code === null;
     this.guard = new ReplayGuard(this.deps.now);
     this.aloneSince = this.deps.now();
     this.emitState();
     let keys: RoomKeys;
     try {
-      keys = await this.deps.deriveKeys(code);
+      keys = await this.deps.deriveKeys(code ?? LAN_GROUP_SECRET);
     } catch {
       if (session === this.session) this.stop();
       return false;
@@ -290,7 +332,8 @@ export class RoomManager extends EventEmitter {
     this.joinedAt = this.lastTick = this.deps.now();
     this.settleShort = false;
     this.settle = setTimeout(() => this.settled(), SETTLE_CAP_MS);
-    for (const t of this.deps.transports) if (t.kind !== 'internet' || this.internetAllowed) this.active.add(t);
+    // The LAN group stays on the local network: over relays it would gather every lolPing in the world.
+    for (const t of this.deps.transports) if (t.kind !== 'internet' || (this.internetAllowed && !this.group)) this.active.add(t);
     for (const t of this.active) t.start(keys);
     this.announce();
     this.ticker = setInterval(() => this.tick(), TICK_MS);
@@ -313,9 +356,16 @@ export class RoomManager extends EventEmitter {
 
   private settled(): void {
     this.settle = null;
+    if (this.group) {
+      this.phase = 'active';
+      this.emit('toast', { kind: 'joinedGroup' } satisfies RoomToast);
+      this.emitState();
+      return;
+    }
     if (this.members.size >= MAX_MEMBERS) {
       this.stop();
       this.emit('toast', { kind: 'full' } satisfies RoomToast);
+      this.fallBackToGroup();
       return;
     }
     this.phase = 'active';
@@ -337,6 +387,7 @@ export class RoomManager extends EventEmitter {
     if (this.settle) clearTimeout(this.settle);
     this.ticker = this.settle = null;
     this.phase = 'idle';
+    this.group = false;
     this.code = this.keys = null;
     this.members.clear();
     this.answered.clear();
@@ -387,8 +438,9 @@ export class RoomManager extends EventEmitter {
     if (!target) return;
     const [x, y] = [msg.x * target.width, msg.y * target.height];
     const tag = { name: m.name, color: m.color };
-    if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, x, y, id: msg.ping, tag } satisfies RemotePing);
-    else this.emit('remoteEmote', { displayId: target.displayId, x, y, ref: msg.e, peer: m.peer, tag } satisfies RemoteEmote);
+    const from = msg.d;
+    if (msg.t === 'ping') this.emit('remotePing', { displayId: target.displayId, from, x, y, id: msg.ping, tag } satisfies RemotePing);
+    else this.emit('remoteEmote', { displayId: target.displayId, from, x, y, ref: msg.e, peer: m.peer, tag } satisfies RemoteEmote);
   }
 
   private onPresence(t: Transport, key: PeerKey, msg: PresenceMsg): void {

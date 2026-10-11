@@ -91,6 +91,15 @@ lolPing checks GitHub for a new version 10 seconds after it starts, then every 6
 - **Check for updates automatically** (Settings → App, on by default) controls the scheduled checks. With it off, lolPing contacts GitHub only when you click **Check for updates** or **Update**.
 - **Privacy:** a check tells GitHub your IP address and lolPing's version, nothing else.
 
+## LAN channel (everyone on your network)
+
+Out of the box, lolPing joins the **LAN channel**: every lolPing on the same local network meets there automatically, with no code and no device to pick. Ping, and everyone in it sees the ping on their own screen with your name under it, plus an alert saying who pinged and on which display.
+
+- It runs over UDP multicast: group `239.255.74.74`, port `47474`, one hop (it never leaves your network, and never goes through internet relays). It is sent out of every network adapter, so VPN or virtual adapters don't swallow it.
+- **Alert on incoming pings** (on by default) shows the alert on the display your mouse is on. If the sender's display number doesn't exist on your machine (say they ping on their display 2 and you have one screen), the ping lands on your display 1 at the same relative spot, and the alert says it moved.
+- Joining or creating a room leaves the LAN channel; leaving the room brings you back. Turn off **Join the LAN channel automatically** in Settings → Room to stay out of it, or leave it from the tray menu.
+- The LAN channel has no member limit and is open to anyone on your network: anyone there can see your pings and your name. Use a room to ping only your friends.
+
 ## Ping with friends (rooms)
 
 Join a room and everyone in it sees your pings on their own screen, at the same spot (scaled to their resolution), with your name under them. Their pings show up on yours. It works between Windows and Mac.
@@ -151,7 +160,7 @@ Bump `version` in `package.json`, commit, then push a matching tag such as `v0.2
 
 - **Input:** [`native/hook-helper`](native/hook-helper) is a small C++ process that owns the low-level mouse and keyboard hooks on Windows, or an event tap on macOS. It swallows the Alt + drag so the app underneath never sees it, and talks to Electron in JSON lines over stdin and stdout.
 - **Display:** Electron draws the wheel and pings in one transparent, click-through, always-on-top window per monitor ([`src/renderer/overlay`](src/renderer/overlay)), and plays the sounds through Web Audio.
-- **Rooms:** [`src/main/roomManager.ts`](src/main/roomManager.ts) keeps the room's members and encrypts every message (AES-256-GCM, key from scrypt over the room code). [`src/main/lanTransport.ts`](src/main/lanTransport.ts) carries the encrypted packets over UDP on the local network, and [`src/main/relayTransport.ts`](src/main/relayTransport.ts) through public Nostr relays as ephemeral events.
+- **Rooms:** [`src/main/roomManager.ts`](src/main/roomManager.ts) keeps the room's members and encrypts every message (AES-256-GCM, key from scrypt over the room code, or over a fixed, public secret for the LAN channel). [`src/main/lanTransport.ts`](src/main/lanTransport.ts) carries the encrypted packets over UDP multicast on the local network (and straight to each member's address once heard), and [`src/main/relayTransport.ts`](src/main/relayTransport.ts) through public Nostr relays as ephemeral events.
 - **Updates:** [`src/main/updater.ts`](src/main/updater.ts) runs the schedule and the state the tray and settings show. [`src/main/updateWin.ts`](src/main/updateWin.ts) updates through electron-updater and the `latest.yml` on the release, and [`src/main/updateMac.ts`](src/main/updateMac.ts) reads the GitHub releases API and checks the disk image against its SHA-256.
 - **Settings:** a Fluent UI window ([`src/renderer/settings`](src/renderer/settings)) with Mica on Windows, restyled like System Settings on macOS.
 - **Demo page:** [`site`](site) runs the same overlay code in the browser, with a small input shim in place of the helper. The README GIF is recorded from it.

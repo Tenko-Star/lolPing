@@ -59,7 +59,7 @@ vi.mock('electron', () => ({
 import { AppTray, trayUpdateFrom } from '../../src/main/tray';
 import { strings } from '../../src/shared/i18n';
 
-const room = { joinClipboard: vi.fn(), create: vi.fn(), copyCode: vi.fn(), setMuted: vi.fn(), leave: vi.fn(), openSettings: vi.fn() };
+const room = { joinClipboard: vi.fn(), create: vi.fn(), copyCode: vi.fn(), setMuted: vi.fn(), leave: vi.fn(), joinGroup: vi.fn(), openSettings: vi.fn() };
 const update = { check: vi.fn(), start: vi.fn() };
 const handlers = { openSettings: vi.fn(), setEnabled: vi.fn(), retryHelper: vi.fn(), quit: vi.fn(), room, update };
 
@@ -113,8 +113,10 @@ describe('AppTray', () => {
 
   it('offers joining from the clipboard or creating a room when not in one', () => {
     new AppTray('icon.png', handlers);
-    expect(roomMenu().map((i) => i.label)).toEqual(['Join from clipboard', 'Create room', 'Room settings…']);
+    expect(roomMenu().map((i) => i.label)).toEqual(['Join LAN channel', 'Join from clipboard', 'Create room', 'Room settings…']);
     roomMenu()[0].click!({});
+    expect(room.joinGroup).toHaveBeenCalled();
+    roomMenu()[1].click!({});
     expect(room.joinClipboard).toHaveBeenCalled();
   });
 
@@ -132,6 +134,20 @@ describe('AppTray', () => {
     expect(room.setMuted).toHaveBeenCalledWith(false);
     tray.setRoom({ code: 'PING-7KQ4M-2HXTR', count: 1, muted: false });
     expect(roomMenu()[0].label).toBe('PING-7KQ4M-2HXTR · 1 person');
+  });
+
+  it('shows the LAN channel with its size, and keeps joining or creating a room one click away', () => {
+    const tray = new AppTray('icon.png', handlers);
+    tray.setRoom({ code: null, count: 4, muted: false, group: true });
+    const items = roomMenu();
+    expect(items[0]).toMatchObject({ label: 'LAN channel · 4 people', enabled: false });
+    expect(items.filter((i) => i.type !== 'separator').map((i) => i.label)).toEqual([
+      'LAN channel · 4 people', 'Mute room', 'Leave LAN channel', 'Join from clipboard', 'Create room', 'Room settings…',
+    ]);
+    items.find((i) => i.label === 'Leave LAN channel')!.click!({});
+    expect(room.leave).toHaveBeenCalled();
+    tray.setRoom({ code: null, count: 4, muted: false, group: false });
+    expect(roomMenu()[0].label).toBe('Join LAN channel');
   });
 
   it('does not rebuild the menu when the room info is unchanged', () => {

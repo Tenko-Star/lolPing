@@ -48,6 +48,10 @@ export interface Settings {
   /** Pings per second accepted from each room member; 0 = unlimited. */
   incomingPingLimit: number;
   allowInternet: boolean;
+  /** Be in the LAN group (multicast, no code) whenever not in a code room. */
+  lanGroup: boolean;
+  /** A toast on the display under the mouse for every ping and emote someone else sends. */
+  pingAlert: boolean;
   rejoinRoom: boolean;
   /** Canonical code of the room to rejoin on launch. */
   lastRoomCode: string | null;
@@ -95,6 +99,8 @@ export const DEFAULT_SETTINGS: Settings = {
   tagColor: 0,
   incomingPingLimit: 5,
   allowInternet: true,
+  lanGroup: true,
+  pingAlert: true,
   rejoinRoom: true,
   lastRoomCode: null,
   roomMuted: false,
@@ -119,7 +125,7 @@ export const LIMITS = {
 } as const;
 
 type NumKey = keyof typeof LIMITS;
-type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'rejoinRoom' | 'roomMuted'
+type BoolKey = 'enabledOnStart' | 'clickPing' | 'muted' | 'tickSound' | 'launchAtStartup' | 'allowInternet' | 'lanGroup' | 'pingAlert' | 'rejoinRoom' | 'roomMuted'
   | 'emoteClick' | 'emoteSound' | 'autoUpdateCheck';
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -232,6 +238,8 @@ export function normalizeSettings(raw: unknown, platform: Platform = 'win', iden
     tagColor: isTagColor(r.tagColor) ? r.tagColor : isTagColor(identity.color) ? identity.color : 0,
     incomingPingLimit: num(r.incomingPingLimit, 'incomingPingLimit'),
     allowInternet: bool(r.allowInternet, 'allowInternet'),
+    lanGroup: bool(r.lanGroup, 'lanGroup'),
+    pingAlert: bool(r.pingAlert, 'pingAlert'),
     rejoinRoom: bool(r.rejoinRoom, 'rejoinRoom'),
     lastRoomCode: roomCode(r.lastRoomCode),
     roomMuted: bool(r.roomMuted, 'roomMuted'),

@@ -27,16 +27,19 @@ export interface TrayHandlers {
     copyCode(): void;
     setMuted(on: boolean): void;
     leave(): void;
+    /** Joins the LAN group (shown while not in any room). */
+    joinGroup(): void;
     /** Opens settings at the Room section. */
     openSettings(): void;
   };
 }
 
-/** What the tray shows about the room: `code` is null when not in one. */
+/** What the tray shows about the room: `code` is null when not in one, and in the LAN group (`group`). */
 export interface TrayRoom {
   code: string | null;
   count: number;
   muted: boolean;
+  group?: boolean;
 }
 
 /**
@@ -120,7 +123,7 @@ export class AppTray {
   setRoom(room: TrayRoom): void {
     if (this.destroyed) return;
     const r = this.room;
-    if (r.code === room.code && r.count === room.count && r.muted === room.muted) return; // room state changes often
+    if (r.code === room.code && r.count === room.count && r.muted === room.muted && !r.group === !room.group) return; // room state changes often
     this.room = room;
     this.render();
   }
@@ -186,8 +189,22 @@ export class AppTray {
     const t = this.text;
     const r = this.handlers.room;
     const settings: MenuItemConstructorOptions = { label: t.trayRoomSettings, click: () => r.openSettings() };
+    if (this.room.group) {
+      // The LAN group is where you are between rooms: joining or creating a room stays one click away.
+      return [
+        { label: t.trayGroupLabel(this.room.count), enabled: false },
+        { type: 'separator' },
+        { label: t.trayRoomMute, type: 'checkbox', checked: this.room.muted, click: (item) => r.setMuted(item.checked) },
+        { label: t.trayGroupLeave, click: () => r.leave() },
+        { type: 'separator' },
+        { label: t.trayRoomJoinClipboard, click: () => r.joinClipboard() },
+        { label: t.trayRoomCreate, click: () => r.create() },
+        settings,
+      ];
+    }
     if (!this.room.code) {
       return [
+        { label: t.trayGroupJoin, click: () => r.joinGroup() },
         { label: t.trayRoomJoinClipboard, click: () => r.joinClipboard() },
         { label: t.trayRoomCreate, click: () => r.create() },
         settings,

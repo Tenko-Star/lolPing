@@ -30,6 +30,7 @@ const api: SettingsApi = {
   getRoom: () => ipcRenderer.invoke(SETTINGS_CH.roomGet),
   onRoom: (cb) => subscribe(SETTINGS_CH.roomChanged, cb),
   createRoom: () => ipcRenderer.invoke(SETTINGS_CH.roomCreate),
+  joinGroup: () => ipcRenderer.invoke(SETTINGS_CH.roomJoinGroup),
   joinRoom: (text) => ipcRenderer.invoke(SETTINGS_CH.roomJoin, text),
   leaveRoom: () => ipcRenderer.invoke(SETTINGS_CH.roomLeave),
   muteMember: (peer, on) => ipcRenderer.invoke(SETTINGS_CH.roomMute, peer, on),

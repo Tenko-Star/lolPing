@@ -91,6 +91,15 @@ lolPing 在启动 10 秒后向 GitHub 检查一次新版本，之后每 6 小时
 - **自动检查更新**（设置 → 应用，默认开启）控制定时检查。关闭后，只有在你点击**检查更新**或**更新**时，lolPing 才会联系 GitHub。
 - **隐私：** 每次检查都会让 GitHub 知道你的 IP 地址和 lolPing 的版本号，别的都不会发送。
 
+## 局域网频道（同一网络中的所有人）
+
+lolPing 启动后默认加入**局域网频道**：同一局域网内所有开着 lolPing 的人都会自动聚到这里，不需要房间码，也不需要指定设备。你发出信号后，频道里的每个人都会在自己的屏幕上看到它（下面带着你的名字），并收到一条提醒：谁发的信号、显示在哪块屏幕上。
+
+- 使用 UDP 组播：组播地址 `239.255.74.74`，端口 `47474`，TTL 为 1（不会离开你的局域网，也永远不走互联网中继）。数据会从每块网卡发出，VPN 或虚拟网卡不会把它“吞掉”。
+- **收到信号时提醒**（默认开启）会在鼠标所在的显示器上弹出提醒。如果对方的显示器编号在你这里不存在（例如对方在 2 号显示器上发信号，而你只有一块屏幕），信号会按相同的相对位置显示在你的 1 号显示器上，提醒里也会注明。
+- 加入或创建房间时会离开局域网频道，离开房间后自动回来。在**设置 → 房间**中关闭**自动加入局域网频道**即可不加入，也可以在托盘菜单中离开。
+- 局域网频道没有人数上限，对网络中的所有人开放：同一网络中的任何人都能看到你的信号和名字。只想和朋友一起时，请使用房间。
+
 ## 和朋友一起发信号（房间）
 
 加入房间后，房间里的每个人都会在自己的屏幕上看到你的信号：位置相同（按各自的分辨率换算），下面带着你的名字。他们的信号也会出现在你的屏幕上。Windows 和 Mac 之间可以互通。
@@ -151,7 +160,7 @@ npm run dev
 
 - **输入：** [`native/hook-helper`](native/hook-helper) 是一个小型 C++ 进程，在 Windows 上负责底层鼠标和键盘钩子，在 macOS 上使用事件监听（event tap）。它会吞掉 Alt + 拖动，使下面的程序完全收不到，并通过 stdin/stdout 以 JSON 行与 Electron 通信。
 - **显示：** Electron 在每个显示器上用一个透明、可点击穿透、始终置顶的窗口绘制轮盘和信号（[`src/renderer/overlay`](src/renderer/overlay)），并用 Web Audio 播放音效。
-- **房间：** [`src/main/roomManager.ts`](src/main/roomManager.ts) 管理房间成员，并加密每条消息（AES-256-GCM，密钥由房间码经 scrypt 生成）。[`src/main/lanTransport.ts`](src/main/lanTransport.ts) 通过局域网 UDP 传输加密后的数据包，[`src/main/relayTransport.ts`](src/main/relayTransport.ts) 则以临时事件的形式通过公共 Nostr 中继传输。
+- **房间：** [`src/main/roomManager.ts`](src/main/roomManager.ts) 管理房间成员，并加密每条消息（AES-256-GCM，密钥由房间码经 scrypt 生成；局域网频道使用一个固定的公开密钥）。[`src/main/lanTransport.ts`](src/main/lanTransport.ts) 通过局域网 UDP 组播传输加密后的数据包（听到对方后也会直接单播给对方），[`src/main/relayTransport.ts`](src/main/relayTransport.ts) 则以临时事件的形式通过公共 Nostr 中继传输。
 - **更新：** [`src/main/updater.ts`](src/main/updater.ts) 负责定时检查，以及托盘和设置里显示的状态。[`src/main/updateWin.ts`](src/main/updateWin.ts) 通过 electron-updater 和 Release 上的 `latest.yml` 更新，[`src/main/updateMac.ts`](src/main/updateMac.ts) 读取 GitHub 的 releases API，并用 SHA-256 校验磁盘映像。
 - **设置：** Fluent UI 窗口（[`src/renderer/settings`](src/renderer/settings)），在 Windows 上使用 Mica 材质，在 macOS 上采用“系统设置”风格。
 - **演示页：** [`site`](site) 在浏览器中运行同一套信号层代码，用一个小的输入适配层代替输入助手。README 里的 GIF 就是用它录制的。

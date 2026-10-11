@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS, overlaySettings } from '../../src/shared/settings';
 const h = vi.hoisted(() => ({
   windows: [] as Array<{ x: number; webContents: { send: ReturnType<typeof vi.fn> } }>,
   handlers: new Map<string, (event: unknown, raw: unknown) => void>(),
+  cursor: { x: 10, y: 10 },
 }));
 
 vi.mock('electron', async () => {
@@ -37,6 +38,8 @@ vi.mock('electron', async () => {
   const screen = Object.assign(new Emitter(), {
     getAllDisplays: () => displays,
     getPrimaryDisplay: () => displays[0],
+    getCursorScreenPoint: () => h.cursor,
+    getDisplayNearestPoint: (p: { x: number }) => (p.x >= 1920 ? displays[1] : displays[0]),
     dipToScreenRect: (_win: unknown, r: unknown) => r,
   });
   const ipcMain = { on: (channel: string, fn: (event: unknown, raw: unknown) => void) => h.handlers.set(channel, fn) };
@@ -168,5 +171,17 @@ describe('OverlayManager remote and preview emotes', () => {
     expect(sent(0)).toEqual([['emote:spawn', { owner: 'preview', art: art('nice', false), x: 960, y: 540 }]]);
     expect(sent(1)).toEqual([]);
     expect(shared).not.toHaveBeenCalled();
+  });
+});
+
+describe('OverlayManager toasts', () => {
+  it('shows a toast on the display under the mouse', () => {
+    h.cursor = { x: 2500, y: 300 };
+    mgr.toast('Bob: Danger', 'On your display #2');
+    expect(sent(1)).toEqual([['toast:show', { title: 'Bob: Danger', body: 'On your display #2' }]]);
+    expect(sent(0)).toEqual([]);
+    h.cursor = { x: 10, y: 10 };
+    mgr.toast('Pings on', '');
+    expect(sent(0)).toEqual([['toast:show', { title: 'Pings on', body: '' }]]);
   });
 });

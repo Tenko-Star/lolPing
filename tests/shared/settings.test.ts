@@ -91,8 +91,13 @@ describe('room settings', () => {
     const s = normalizeSettings({}, 'win', identity);
     expect(s).toMatchObject({
       displayName: 'darren', tagColor: 5, incomingPingLimit: 5, allowInternet: true, rejoinRoom: true,
-      lastRoomCode: null, roomMuted: false,
+      lastRoomCode: null, roomMuted: false, lanGroup: true, pingAlert: true,
     });
+  });
+
+  it('keeps the LAN channel and ping alerts turned off, and ignores anything that is not a boolean', () => {
+    expect(normalizeSettings({ lanGroup: false, pingAlert: false })).toMatchObject({ lanGroup: false, pingAlert: false });
+    expect(normalizeSettings({ lanGroup: 'no', pingAlert: 0 })).toMatchObject({ lanGroup: true, pingAlert: true });
   });
 
   it('defaults to Player and colour 0 without an identity', () => {

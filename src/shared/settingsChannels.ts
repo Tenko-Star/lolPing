@@ -19,6 +19,7 @@ export const SETTINGS_CH = {
   roomGet: 'room:get',
   roomChanged: 'room:state',
   roomCreate: 'room:create',
+  roomJoinGroup: 'room:joinGroup',
   roomJoin: 'room:join',
   roomLeave: 'room:leave',
   roomMute: 'room:mute',

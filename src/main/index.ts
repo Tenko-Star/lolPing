@@ -8,10 +8,11 @@ import { hotkeyLabel } from '../shared/keys';
 import { configCommand, type HelperStatus } from '../shared/protocol';
 import type { RoomState } from '../shared/room';
 import { formatRoomCode, parseRoomCode } from '../shared/roomCode';
+import { catalogEmote } from '../shared/emotes';
 import { overlaySettings, type Settings } from '../shared/settings';
 import { updateErrorText, type UpdateState } from '../shared/update';
 import { registerAppScheme, serveAppScheme } from './appProtocol';
-import { resolveTarget, toShared } from './displayNumbers';
+import { landedOn, resolveTarget, toShared } from './displayNumbers';
 import { EmoteLibrary, resolveEmoteArt } from './emoteLibrary';
 import { InputBridge } from './inputBridge';
 import { LanTransport } from './lanTransport';
@@ -20,7 +21,7 @@ import { RelayTransport } from './relayTransport';
 import { OverlayManager, type SharedEmote, type SharedPing } from './overlayManager';
 import { assetPath, buildResourcePath, helperExePath, IS_MAC, PLATFORM, settingsDir } from './paths';
 import { deriveRoomKeys } from './roomCrypto';
-import { RoomManager, type RoomToast } from './roomManager';
+import { RoomManager, type RemoteEmote, type RemotePing, type RoomToast } from './roomManager';
 import { registerSettingsIpc } from './settingsIpc';
 import { SettingsStore } from './settingsStore';
 import { onSettingsWindowGone, openSettingsWindow, settingsWindow } from './settingsWindow';
@@ -127,7 +128,8 @@ function start(): void {
     });
   }
 
-  // Room: pings shared with other lolPing users, on the network and through public relays.
+  // Room: pings shared with other lolPing users, on the network (multicast) and through public relays. Out of a code
+  // room, everyone on the network meets in the LAN group.
   const lan = new LanTransport();
   const relay = new RelayTransport({ urls: relayUrls() });
   const room = new RoomManager({
@@ -141,6 +143,7 @@ function start(): void {
       const target = resolveTarget(overlays.numbered(), d);
       return target ? { displayId: target.id, width: target.bounds.width, height: target.bounds.height } : null;
     },
+    lanGroup: () => settings.lanGroup,
   });
   const roomState = (): RoomState => {
     const all = screen.getAllDisplays();
@@ -203,6 +206,7 @@ function start(): void {
       retryHelper: startHelper,
       quit: () => app.quit(),
       room: {
+        joinGroup: () => void room.joinGroup(),
         joinClipboard: () => {
           void clipboardCode().then((code) => {
             if (code) void room.join(code);
@@ -242,18 +246,37 @@ function start(): void {
   function pushRoom(): void {
     if (quitting) return;
     const s = roomState();
-    tray.setRoom({ code: s.code, count: s.members.length, muted: settings.roomMuted });
+    tray.setRoom({ code: s.code, count: s.members.length, muted: settings.roomMuted, group: s.group });
     settingsWindow()?.webContents.send(SETTINGS_CH.roomChanged, s);
   }
   const syncRoomFlags = (): void => room.setStatusFlags({ paused: !enabled, roomMuted: settings.roomMuted });
   room.on('state', pushRoom);
   overlays.on('displays', pushRoom);
-  room.on('remotePing', (p) => overlays.spawnRemote(p));
+  /**
+   * "Someone pinged": a toast on the display under the mouse, saying who, what, and on which of our displays it landed.
+   * With several displays a ping can land on one the user isn't looking at; with fewer than the sender's it moves to #1.
+   */
+  const alert = (title: string, p: { displayId: number; from: number }): void => {
+    if (!settings.pingAlert || quitting) return;
+    const t = text();
+    const where = landedOn(overlays.numbered(), p.displayId, p.from);
+    overlays.toast(title, where.moved ? t.alertMoved(p.from, where.number) : t.alertOn(where.number));
+  };
+  room.on('remotePing', (p: RemotePing) => {
+    overlays.spawnRemote(p);
+    alert(text().alertPing(p.tag.name, text().pingNames[p.id]), p);
+  });
   overlays.on('shared', (p: SharedPing) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendPing(p.id, shared);
   });
-  room.on('remoteEmote', (p) => overlays.spawnRemoteEmote(p));
+  room.on('remoteEmote', (p: RemoteEmote) => {
+    overlays.spawnRemoteEmote(p);
+    const t = text();
+    const known = catalogEmote(p.ref);
+    const name = known ? (t.lang === 'zh-CN' ? known.nameZh : known.name) : null;
+    alert(name ? t.alertPing(p.tag.name, name) : t.alertEmote(p.tag.name), p);
+  });
   overlays.on('sharedEmote', (p: SharedEmote) => {
     const shared = toShared(overlays.numbered(), p.displayId, p.x, p.y);
     if (shared) room.sendEmote(p.ref, shared);
@@ -261,8 +284,9 @@ function start(): void {
   room.on('saveCode', (code: string | null) => store.update({ lastRoomCode: code }));
   room.on('toast', (n: RoomToast) => {
     const t = text();
-    const code = room.state().code ?? '';
+    const code = room.state().code ?? t.groupTitle;
     if (n.kind === 'joinedRoom') overlays.toast(t.toastRoomJoined(n.code), t.toastRoomJoinedBody);
+    else if (n.kind === 'joinedGroup') overlays.toast(t.toastGroupJoined, t.toastGroupJoinedBody);
     else if (n.kind === 'full') overlays.toast(t.toastRoomFull, t.toastRoomFullBody);
     else if (n.kind === 'joined') overlays.toast(t.toastMemberJoined(n.name), code);
     else if (n.kind === 'left') overlays.toast(t.toastMemberLeft(n.name), code);
@@ -337,6 +361,10 @@ function start(): void {
       room.setInternetAllowed(s.allowInternet);
       pushRoom();
     }
+    if (s.lanGroup !== previous.lanGroup) {
+      if (!s.lanGroup) room.leaveGroup();
+      else if (room.state().phase === 'idle') void room.joinGroup();
+    }
     if (app.isPackaged && s.launchAtStartup !== previous.launchAtStartup) {
       // macOS ignores args, and a Mac launch starts in the menu bar anyway.
       app.setLoginItemSettings(IS_MAC ? { openAtLogin: s.launchAtStartup } : { openAtLogin: s.launchAtStartup, args: ['--hidden'] });
@@ -369,6 +397,7 @@ function start(): void {
     room: {
       state: roomState,
       create: () => room.create(),
+      joinGroup: () => room.joinGroup(),
       join: (t) => room.join(t),
       leave: () => room.leave(),
       mute: (peer, on) => room.muteMember(peer, on),
@@ -392,6 +421,7 @@ function start(): void {
   room.setInternetAllowed(settings.allowInternet);
   pushRoom();
   if (settings.rejoinRoom && settings.lastRoomCode) void room.join(settings.lastRoomCode);
+  else if (settings.lanGroup) void room.joinGroup();
   if (IS_MAC) {
     // A menu bar app: open settings only when there is something to do, otherwise point at the menu bar icon.
     if (store.firstRun || !trusted()) openSettingsWindow();

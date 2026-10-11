@@ -24,6 +24,15 @@ export function toShared(list: readonly NumberedDisplay[], displayId: number, x:
   return { d: d.number, x: clamp01(x / d.bounds.width), y: clamp01(y / d.bounds.height) };
 }
 
+/**
+ * Where a ping from the sender's display `from` ended up here (displayId): our number for that display, and whether it
+ * moved, because this machine has no display with the sender's number.
+ */
+export function landedOn(list: readonly NumberedDisplay[], displayId: number, from: number): { number: number; moved: boolean } {
+  const number = list.find((n) => n.id === displayId)?.number ?? 1;
+  return { number, moved: number !== from };
+}
+
 /** Where a room ping for display `d` lands here: that display, or the primary when this machine has no #d. */
 export function resolveTarget(list: readonly NumberedDisplay[], d: number): NumberedDisplay | null {
   return list.find((n) => n.number === d) ?? list[0] ?? null;
