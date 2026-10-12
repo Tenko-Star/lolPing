@@ -11,10 +11,10 @@ pub struct Limiter {
     times: VecDeque<u64>,
 }
 
-/// What a sender allows itself: one every 100 ms, five in any 5 s.
-pub const SEND: (u64, usize, u64) = (100, 5, 5000);
+/// What a sender allows itself: one every 100 ms, twenty in any 5 s.
+pub const SEND: (u64, usize, u64) = (100, 20, 5000);
 /// What a receiver lets through from one origin: the same, with slack for network jitter bunching packets up.
-pub const RECEIVE: (u64, usize, u64) = (50, 5, 4500);
+pub const RECEIVE: (u64, usize, u64) = (50, 20, 4500);
 
 impl Limiter {
     pub fn new((min_gap_ms, max, window_ms): (u64, usize, u64)) -> Self {
@@ -56,12 +56,12 @@ mod tests {
     }
 
     #[test]
-    fn allows_five_in_any_five_seconds() {
+    fn allows_twenty_in_any_five_seconds() {
         let mut l = Limiter::new(SEND);
-        for i in 0..5 {
+        for i in 0..20 {
             assert!(l.allow(10_000 + i * 100), "{i}");
         }
-        assert!(!l.allow(10_500));
+        assert!(!l.allow(12_000));
         assert!(!l.allow(14_999));
         // The first one leaves the window at 15 000; the next at 15 100.
         assert!(l.allow(15_000));
@@ -81,10 +81,10 @@ mod tests {
     }
 
     #[test]
-    fn steady_pinging_settles_at_one_a_second() {
+    fn steady_pinging_settles_at_four_a_second() {
         let mut l = Limiter::new(SEND);
         let sent = (0..60_000).step_by(100).filter(|&t| l.allow(t)).count();
-        assert_eq!(sent, 60);
+        assert_eq!(sent, 240);
     }
 
     #[test]

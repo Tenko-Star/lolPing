@@ -1,6 +1,6 @@
 [package]
 name = "lolping-lite"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "lolPing Lite: Alt+? sends League's \"?\" ping to everyone on the LAN."
 license = "MIT"

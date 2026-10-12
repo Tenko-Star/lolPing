@@ -10,10 +10,11 @@ the screen of everyone on the LAN, with the original sound. No settings window, 
 1. Run `lolping-lite.exe`. No window opens: its icon appears in the tray. The first time, Windows Firewall asks about
    network access: allow it on private networks.
 2. Press **Alt + ?**: Alt and the `/?` key left of right Shift. It goes by the key's position, so any keyboard layout
-   works; the keypad's `/` doesn't count. The key still reaches the app you're in: lolPing Lite only listens.
+   works; the keypad's `/` doesn't count. lolPing Lite keeps the key to itself, so no "/" lands in the text box you're
+   typing in, and the Alt release doesn't put the window's menu bar in focus. `/` without Alt types as usual.
 3. Everyone on the LAN running lolPing Lite sees it.
 
-- Limits: one every 100 ms at most, and five in any 5 seconds. Holding the keys down is no faster.
+- Limits: one every 100 ms at most, and twenty in any 5 seconds. Holding the keys down is no faster.
 - Each "?" plays the original animation for the original 3.2 s.
 - Where it lands is picked on each receiving machine, on the display under its mouse. Spots fill an ellipse the shape of the display: densest on a ring, about 30 % of that in the middle, thinning out to almost nothing towards the edges, and never within 5 % of an edge.
 - A burst from one person (each ping less than 3.2 s after their last) gathers around the burst's first ping.

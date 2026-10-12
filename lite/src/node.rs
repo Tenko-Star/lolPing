@@ -486,19 +486,19 @@ mod tests {
     }
 
     #[test]
-    fn the_sender_is_limited_to_one_per_100ms_and_five_per_5s() {
+    fn the_sender_is_limited_to_one_per_100ms_and_twenty_per_5s() {
         let mut lan = Lan::new(&IDS);
         lan.run(2_000);
         lan.clear();
         let mut sent = 0;
-        for _ in 0..40 {
+        for _ in 0..80 {
             if lan.send(1) {
                 sent += 1;
             }
             lan.run(50);
         }
-        assert_eq!(sent, 5); // 2 s of hammering: five went out
-        assert_eq!(lan.shown[2].len(), 5);
+        assert_eq!(sent, 20); // 4 s of hammering: twenty went out
+        assert_eq!(lan.shown[2].len(), 20);
     }
 
     #[test]
@@ -506,8 +506,8 @@ mod tests {
         let mut lan = Lan::new(&IDS);
         lan.run(2_000);
         lan.clear();
-        // A modified client: twenty relays at once, straight to everyone.
-        for msg in 0..20 {
+        // A modified client: forty relays at once, straight to everyone.
+        for msg in 0..40 {
             let p = proto::encode(&Packet { from: 99, body: Body::Relay { origin: 99, msg, kind: 0 } });
             for j in 0..4 {
                 lan.nodes[j].receive(lan.now + msg * 60, addr(9), &p);
@@ -515,7 +515,7 @@ mod tests {
         }
         lan.flush();
         for j in 0..4 {
-            assert_eq!(lan.shown[j].len(), 5, "node {j}");
+            assert_eq!(lan.shown[j].len(), 20, "node {j}");
         }
     }
 
